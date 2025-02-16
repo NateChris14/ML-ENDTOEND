@@ -9,7 +9,7 @@ env:
   AWS_REGION: us-east-1                      # Replace with your AWS region
   ECR_REPOSITORY: studentperformance         # Replace with your Amazon ECR repository name
   EC2_PUBLIC_IP: 54.90.169.53                # Replace with your actual EC2 Public IP
-  EC2_USER: ubuntu                         # Amazon Linux uses 'ec2-user', Ubuntu uses 'ubuntu'
+  EC2_USER: ubuntu                           # Amazon Linux uses 'ec2-user', Ubuntu uses 'ubuntu'
 
 permissions:
   contents: read
@@ -47,9 +47,12 @@ jobs:
 
     - name: Create Private Key File
       run: |
-        # Remove any spaces or non-required characters from the SSH key stored in GitHub Secrets
-        echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' | tr -d '\n' > private_key.pem
+        # Properly format the SSH key
+        echo "${{ secrets.EC2_SSH_KEY }}" | sed 's/\\n/\n/g' > private_key.pem
         chmod 600 private_key.pem
+
+    - name: Debug SSH Connection
+      run: ssh -v -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@${{ env.EC2_PUBLIC_IP }} "echo SSH Connected!"
 
     - name: Deploy to EC2
       run: |
