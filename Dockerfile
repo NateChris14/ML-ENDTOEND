@@ -7,12 +7,9 @@ WORKDIR /app
 #Copying the application code
 COPY . /app
 
+RUN apt update -y && apt install awscli -y
 #Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-#Exposing port
-ENV PORT=5000
-EXPOSE 5000
-
 #Running the application:
-CMD ["gunicorn","application:app"]
+CMD ["python3","app:app"]
