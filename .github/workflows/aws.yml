@@ -3,13 +3,13 @@ name: Deploy to EC2
 on:
   push:
     branches:
-      - main  # Runs only when pushing to main branch
+      - main  # Runs only when pushing to the main branch
 
 env:
   AWS_REGION: us-east-1                      # Replace with your AWS region
   ECR_REPOSITORY: studentperformance         # Replace with your Amazon ECR repository name
   EC2_PUBLIC_IP: 54.90.169.53                # Replace with your actual EC2 Public IP
-  EC2_USER: ubuntu                         # Amazon Linux uses 'ec2-user', Ubuntu uses 'ubuntu'
+  EC2_USER: ec2-user                         # Use 'ec2-user' for Amazon Linux, 'ubuntu' for Ubuntu
 
 permissions:
   contents: read
@@ -43,20 +43,21 @@ jobs:
       run: |
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
     - name: Create Private Key File
       run: |
-        echo "${{ secrets.EC2_SSH_KEY }}" > private_key.pem
+        echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > private_key.pem
         chmod 600 private_key.pem
 
     - name: Deploy to EC2
       run: |
-        ssh -tt -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@${{ env.EC2_PUBLIC_IP }} << 'EOF'
+        IMAGE=${{ env.image }}
+        ssh -tt -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@${{ env.EC2_PUBLIC_IP }} << EOF
           echo "Connected to EC2!"
-          docker pull ${{ steps.build-image.outputs.image }}
+          docker pull $IMAGE
           docker stop my-python-app || true
           docker rm my-python-app || true
-          docker run -d -p 5000:5000 --name my-python-app ${{ steps.build-image.outputs.image }}
+          docker run -d -p 5000:5000 --name my-python-app $IMAGE
           exit
         EOF
