@@ -37,6 +37,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y jq unzip
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -55,19 +56,15 @@ jobs:
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
           IMAGE_TAG: latest
         run: |
-          # Build a docker container and
-          # push it to ECR so that it can
-          # be deployed to ECS.
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          
-          
-  Continuous-Deployment:
+
+  continuous-deployment:
     needs: build-and-push-ecr-image
-    runs-on: self-hosted
+    runs-on: ubuntu-latest  # or your self-hosted runner
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v3
 
       - name: Configure AWS credentials
@@ -80,19 +77,59 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
-      
-      
-      - name: Pull latest images
+
+      - name: Pull latest image from ECR
         run: |
-         docker pull ${{secrets.AWS_ECR_LOGIN_URI}}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
-         
-      - name: Stop and remove container if running
+          docker pull ${{secrets.AWS_ECR_LOGIN_URI}}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
+
+      - name: Create ECS Task Definition
+        id: ecs-task-definition
         run: |
-         docker ps -q --filter "name=cnncls" | grep -q . && docker stop cnncls && docker rm -fv cnncls
-       
-      - name: Run Docker Image to serve users
+          echo "Creating ECS Task Definition..."
+          ecs_task_definition=$(cat <<EOF
+          {
+            "family": "my-ecs-task",
+            "containerDefinitions": [
+              {
+                "name": "my-container",
+                "image": "${{secrets.AWS_ECR_LOGIN_URI}}/${{ secrets.ECR_REPOSITORY_NAME }}:latest",
+                "memory": 512,
+                "cpu": 256,
+                "essential": true,
+                "environment": [
+                  {
+                    "name": "AWS_ACCESS_KEY_ID",
+                    "value": "${{ secrets.AWS_ACCESS_KEY_ID }}"
+                  },
+                  {
+                    "name": "AWS_SECRET_ACCESS_KEY",
+                    "value": "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+                  },
+                  {
+                    "name": "AWS_REGION",
+                    "value": "${{ secrets.AWS_REGION }}"
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+          )
+          echo "$ecs_task_definition" > ecs_task_definition.json
+
+      - name: Register ECS Task Definition
         run: |
-         docker run -d -p 8080:8080 --name=cnncls -e 'AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}' -e 'AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}' -e 'AWS_REGION=${{ secrets.AWS_REGION }}'  ${{secrets.AWS_ECR_LOGIN_URI}}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
-      - name: Clean previous images and containers
+          aws ecs register-task-definition \
+            --cli-input-json file://ecs_task_definition.json
+
+      - name: Deploy to ECS
         run: |
-         docker system prune -f
+          echo "Updating ECS service..."
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.ECS_SERVICE }} \
+            --task-definition my-ecs-task
+
+      - name: Clean up previous images and containers
+        run: |
+          docker system prune -f
