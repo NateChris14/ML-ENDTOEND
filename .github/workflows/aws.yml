@@ -3,7 +3,7 @@ name: Deploy to EC2
 on:
   push:
     branches:
-      - main  # Runs only when pushing to main branch
+      - main  # Runs only when pushing to the main branch
 
 env:
   AWS_REGION: us-east-1                      # Replace with your AWS region
@@ -48,12 +48,12 @@ jobs:
     - name: Create Private Key File
       run: |
         # Remove any spaces or non-required characters from the SSH key stored in GitHub Secrets
-        echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" | tr -d '\r' | tr -d '\n' > private_key.pem
-        chmod 600 private_key.pem
+        echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" | tr -d '\r' | tr -d '\n' > sample-ec2.pem
+        chmod 600 sample-ec2.pem
 
     - name: Deploy to EC2
       run: |
-        ssh -tt -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@${{ env.EC2_PUBLIC_IP }} << 'EOF'
+        ssh -tt -o StrictHostKeyChecking=no -i sample-ec2.pem $EC2_USER@${{ env.EC2_PUBLIC_IP }} << 'EOF'
           echo "Connected to EC2!"
           docker pull ${{ steps.build-image.outputs.image }}
           docker stop my-python-app || true
