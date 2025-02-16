@@ -1,15 +1,14 @@
-name: Deploy to EC2 with Amazon ECR
+name: Deploy to AWS EC2
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main" ]  # Runs the workflow on push to the main branch
 
 env:
-  AWS_REGION: us-east-1                # Set to your AWS region
-  ECR_REPOSITORY: studentperformance   # Your ECR repository name
-  EC2_PUBLIC_IP: 54.90.169.53          # Replace with your EC2 instance's public IP
-  SSH_KEY: ${{ secrets.EC2_SSH_KEY }}  # SSH key stored in GitHub secrets
-  EC2_USER: ec2-user                   # Default user for Amazon Linux
+  AWS_REGION: us-east-1                    # Set your AWS region
+  ECR_REPOSITORY: studentperformance       # Set your Amazon ECR repository name
+  EC2_PUBLIC_IP: YOUR_EC2_PUBLIC_IP        # Replace with your EC2 instance public IP
+  EC2_USER: ec2-user                       # Use 'ubuntu' if deploying on an Ubuntu server
 
 permissions:
   contents: read
@@ -21,7 +20,7 @@ jobs:
     environment: production
 
     steps:
-    - name: Checkout Repository
+    - name: Checkout Code
       uses: actions/checkout@v4
 
     - name: Configure AWS credentials
@@ -43,24 +42,27 @@ jobs:
       run: |
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        echo "IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
-    - name: Deploy to EC2
+    - name: Setup SSH Key for EC2
       run: |
         echo "$SSH_KEY" > private_key.pem
         chmod 600 private_key.pem
+      shell: bash
+      env:
+        SSH_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
 
-        ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_PUBLIC_IP << 'EOF'
-          echo "Pulling latest Docker image..."
-          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
-          docker pull $IMAGE
+    - name: Deploy Application on EC2
+      run: |
+        ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@${{ env.EC2_PUBLIC_IP }} << 'EOF'
+          # Stop existing Docker container (if running)
+          docker stop student-app || true
+          docker rm student-app || true
           
-          echo "Stopping and removing old container..."
-          docker stop studentperformance || true
-          docker rm studentperformance || true
+          # Pull the latest Docker image
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+          docker pull ${{ env.image }}
 
-          echo "Running new container..."
-          docker run -d -p 5000:5000 --name studentperformance $IMAGE
+          # Run the container
+          docker run -d -p 5000:5000 --name student-app ${{ env.image }}
         EOF
-
-        rm -f private_key.pem
