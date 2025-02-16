@@ -3,13 +3,13 @@ name: Deploy to EC2
 on:
   push:
     branches:
-      - main  # Trigger on push to the main branch
+      - main  # Runs only when pushing to main branch
 
 env:
   AWS_REGION: us-east-1                      # Replace with your AWS region
   ECR_REPOSITORY: studentperformance         # Replace with your Amazon ECR repository name
   EC2_PUBLIC_IP: 54.90.169.53                # Replace with your actual EC2 Public IP
-  EC2_USER: ubuntu                           # Amazon Linux uses 'ec2-user', Ubuntu uses 'ubuntu'
+  EC2_USER: ubuntu                           # Use 'ubuntu' for Ubuntu EC2 instances
 
 permissions:
   contents: read
@@ -43,38 +43,21 @@ jobs:
       run: |
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        echo "IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
-    - name: Create and Convert Private Key to PEM
+    - name: Create Private Key File
       run: |
-        # Restore SSH private key and convert to PEM format
-        echo "${{ secrets.EC2_SSH_KEY }}" | sed 's/\\n/\n/g' > private_key.pem
-        chmod 600 private_key.pem
-        
-        # Ensure key is in PEM format (for OpenSSH compatibility)
-        ssh-keygen -p -m PEM -f private_key.pem -N "" || true
-
-    - name: Debug SSH Connection
-      run: |
-        echo "Testing SSH connection..."
-        ssh -v -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@${{ env.EC2_PUBLIC_IP }} "echo SSH Connected!"
+        echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' | tr -d '\n' > sample-ec2.pem
+        chmod 600 sample-ec2.pem
 
     - name: Deploy to EC2
       run: |
-        ssh -tt -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@${{ env.EC2_PUBLIC_IP }} << 'EOF'
-          echo "✅ Successfully connected to EC2!"
-          echo "Pulling Docker image from Amazon ECR..."
-          docker pull $IMAGE
-          
-          echo "Stopping old container (if any)..."
+        ssh -tt -o StrictHostKeyChecking=no -i sample-ec2.pem $EC2_USER@${{ env.EC2_PUBLIC_IP }} << 'EOF'
+          echo "Connected to EC2!"
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+          docker pull ${{ env.image }}
           docker stop my-python-app || true
-          
-          echo "Removing old container (if any)..."
           docker rm my-python-app || true
-          
-          echo "Running new Docker container..."
-          docker run -d -p 5000:5000 --name my-python-app $IMAGE
-          
-          echo "✅ Deployment complete!"
+          docker run -d -p 5000:5000 --name my-python-app ${{ env.image }}
           exit
         EOF
