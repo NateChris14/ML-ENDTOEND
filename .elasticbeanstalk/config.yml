@@ -2,6 +2,10 @@ branch-defaults:
   main:
     environment: my-ml-app-env
     group_suffix: null
+environment-defaults:
+  my-ml-app-env:
+    branch: null
+    repository: null
 global:
   application_name: MLENDTOEND
   branch: null
