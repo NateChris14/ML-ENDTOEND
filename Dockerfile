@@ -1,15 +1,21 @@
-#Creating a base image
+# Creating a base image
 FROM python:3.12
 
-#Setting the working directory
+# Setting the working directory
 WORKDIR /app
 
-#Copying the application code
+# Copying the application code
 COPY . /app
 
-RUN apt update -y && apt install awscli -y
-#Install dependencies
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-#Running the application:
-CMD ["python3","app:app"]
+# Set environment variables
+ENV FLASK_APP=app.py
+ENV PORT=8080
+
+# Expose the required port
+EXPOSE 8080
+
+# Run the application
+CMD ["flask", "run", "--host=0.0.0.0", "--port=8080"]
