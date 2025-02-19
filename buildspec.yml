@@ -4,13 +4,13 @@ env:
   variables:
     FLASK_APP: app.py
     FLASK_ENV: production
+    PORT: 8080
 
 phases:
   install:
     runtime-versions:
-      python: 3.8
+      python: 3.12
     commands:
-      # Upgrade pip and install dependencies
       - echo Installing dependencies...
       - pip install --upgrade pip
       - pip install -r requirements.txt
@@ -18,20 +18,17 @@ phases:
 
   pre_build:
     commands:
-      # Any preparation steps you need can go here
       - echo Pre-build phase complete.
 
   build:
     commands:
-      # Building your app for deployment
       - echo Building your Flask app...
-      - python -m flask --app $FLASK_APP db init  # Optional: if you need to initialize a database
+      # Removed 'flask db init' to avoid errors
 
   post_build:
     commands:
       - echo Build complete, ready to deploy!
-      # Ensure your app starts with gunicorn for production (or you could use flask run, depending on your setup)
-      - gunicorn --bind 0.0.0.0:5000 app:app
+      - gunicorn --bind 0.0.0.0:8080 app:app  # Match Dockerfile port
 
 artifacts:
   files:
