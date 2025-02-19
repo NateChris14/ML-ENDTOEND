@@ -14,7 +14,7 @@ phases:
       - echo Installing dependencies...
       - pip install --upgrade pip
       - pip install -r requirements.txt
-      - pip install gunicorn
+      - pip install gunicorn  # For when deploying with Elastic Beanstalk
 
   pre_build:
     commands:
@@ -23,12 +23,12 @@ phases:
   build:
     commands:
       - echo Building your Flask app...
-      # Removed 'flask db init' to avoid errors
+      # Add additional build commands here if needed, e.g., to run tests
+      # - pytest  # Example: run tests
 
   post_build:
     commands:
       - echo Build complete, ready to deploy!
-      - gunicorn --bind 0.0.0.0:8080 app:app  # Match Dockerfile port
 
 artifacts:
   files:
